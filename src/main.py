@@ -1,8 +1,8 @@
 import pygame as pg
 # from pygame.locals import *
 # -^ only commented cause its not being used and nvim is crying about it #
-# /* making it clear now, #// means for school and
-# comment # means personal (delete personals) */
+# WARNING: /* making it clear now, #// means for school and
+# WARNING: comment # means personal (delete personals) */
 
 # // Initialize pygame lib
 pg.init()
@@ -17,30 +17,76 @@ pg.display.set_caption("platformer")
 
 # // load images
 bg_img = pg.image.load("assets/mine/level1background.png")
-border_img = pg.image.load("assets/mine/level1border.png")
-border_img = pg.transform.scale(border_img, (1280, 720))  # // fix img size
-plr1_img = pg.image.load("assets/mine/player.png")
-box1_img = pg.image.load("assets/mine/level1movableBox.png")
-box1_img = pg.transform.scale(box1_img, ((5*40), (3*40)))
-# the reason alot of scales are being * by 40 is
-# that i made the levels in 32x18 but the window is 1280x720
-# so the scale factor is 40 from 32x18 to 1280x720
+bg_img = pg.transform.scale(bg_img, (1280, 720))
+
 
 # --------------------------------------------------------------
 
+tile_size = 40
+
+
+class World():
+    def __init__(self, data):
+        self.tile_list = []
+
+        tile_img = pg.image.load("assets/mine/level1tile.png")
+        rCount = 0
+
+        for i in data:
+            cCount = 0
+            for j in i:
+                if j == 1:
+                    img = pg.transform.scale(tile_img, (tile_size, tile_size))
+                    img_rect = img.get_rect()
+                    img_rect.x = cCount * tile_size
+                    img_rect.y = rCount * tile_size
+                    tile = (img, img_rect)
+                    self.tile_list.append(tile)
+                cCount += 1
+            rCount += 1
+
+    def draw(self):
+        for i in self.tile_list:
+            screen.blit(i[0], i[1])
+
+
+world_data = [
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+]
+# TODO: -^ PLEASE find a way to do this shit normally cause i might commit suicide #
+# --------------------------------------------------------------
+
+# clock so we can lock FPS to 60
+clock = pg.time.Clock()
+
 # // run the game loop
+
+world = World(world_data)
 
 run = True
 while run:
     # display images
     screen.blit(bg_img, (0, 0))
-    screen.blit(border_img, (0, 0))
+    world.draw()
 
-    # render one player (for now) since im still learning pygame
-    screen.blit(plr1_img, ((1*40), (15*40)))
-
-    # render the boxes i want the players to move
-    screen.blit(box1_img, ((0), (0)))
+    print(world.tile_list)
 
     # // event loop
     for ev in pg.event.get():
@@ -48,5 +94,6 @@ while run:
             run = False
 
     pg.display.update()
+    clock.tick(60)
 
 pg.quit()
