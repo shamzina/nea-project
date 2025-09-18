@@ -11,9 +11,11 @@ render_height = 450
 window_width = 1280
 window_height = 720
 
-# Global level variable (0 = main menu, 1 = level 1, 2 = level 2, etc.)
-level = 0
+# Global game state variables
+level = 0  # 0 = main menu, 1 = level 1, etc.
 game_over = 0
+max_levels = 3 # The total number of level files you have
+paused = False
 
 # Create a blank window and give it a title
 screen = pg.display.set_mode((window_width, window_height))
@@ -22,42 +24,46 @@ pg.display.set_caption("platformer")
 # Create a surface for rendering at the lower resolution
 render_surface = pg.Surface((render_width, render_height))
 
-# Load images (using placeholder colors for missing images)
+# Define font for text
+font = pg.font.SysFont('Bauhaus 93', 50)
+white = (255, 255, 255)
+
+# Load images
 try:
     bg_img = pg.image.load("assets/mine/level1background.png")
     bg_img = pg.transform.scale(bg_img, (render_width, render_height))
 except:
     bg_img = pg.Surface((render_width, render_height))
-    bg_img.fill((50, 50, 100))  # Blue background if image not found
+    bg_img.fill((50, 50, 100))
 
 try:
     menu_bg_img = pg.image.load("assets/mine/level1background.png")
     menu_bg_img = pg.transform.scale(menu_bg_img, (render_width, render_height))
 except:
     menu_bg_img = pg.Surface((render_width, render_height))
-    menu_bg_img.fill((100, 50, 50))  # Red background if image not found
+    menu_bg_img.fill((100, 50, 50))
 
 try:
     res_img = pg.image.load("assets/mine/restart_btn.png")
     res_img = pg.transform.scale(res_img, (100, 50))
 except:
     res_img = pg.Surface((100, 50))
-    res_img.fill((200, 0, 0))  # Red button if image not found
+    res_img.fill((200, 0, 0))
 
 try:
-    start_img = pg.image.load("assets/mine/restart_btn.png")
+    start_img = pg.image.load("assets/mine/start_btn.png")
     start_img = pg.transform.scale(start_img, (100, 50))
 except:
     start_img = pg.Surface((100, 50))
-    start_img.fill((0, 200, 0))  # Green button if image not found
+    start_img.fill((0, 200, 0))
 
-# Using 20px tile size for optimal performance at 30FPS
+# Game variables
 tile_size = 20
 
-# Calculate the grid size based on tile size
-grid_width = render_width // tile_size
-grid_height = render_height // tile_size
-
+# Function to draw text on the screen
+def draw_text(text, text_font, text_col, x, y):
+    img = text_font.render(text, True, text_col)
+    render_surface.blit(img, (x, y))
 
 class Button():
     def __init__(self, x, y, image, scale=1.0):
@@ -73,9 +79,7 @@ class Button():
 
     def draw(self):
         action = False
-        # Get mouse position relative to render surface
         mouse_pos = pg.mouse.get_pos()
-        # Scale mouse position to render surface coordinates
         scaled_mouse_x = mouse_pos[0] * render_width / window_width
         scaled_mouse_y = mouse_pos[1] * render_height / window_height
         scaled_mouse_pos = (scaled_mouse_x, scaled_mouse_y)
@@ -91,15 +95,15 @@ class Button():
         render_surface.blit(self.image, self.rect)
         return action
 
-
-class Player1():
-    def __init__(self, x, y):
+class Player(pg.sprite.Sprite):
+    def __init__(self, x, y, controls):
+        pg.sprite.Sprite.__init__(self)
         try:
             img = pg.image.load("assets/mine/player.png")
             self.image = pg.transform.scale(img, (tile_size, tile_size * 2))
         except:
             self.image = pg.Surface((tile_size, tile_size * 2))
-            self.image.fill((0, 0, 255))  # Blue player if image not found
+            self.image.fill((0, 0, 255))
 
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -109,168 +113,102 @@ class Player1():
         self.vel_y = 0
         self.jumped = False
         self.direction = 0
+        self.controls = controls
 
-    def update(self):
-        # set change in Y and X
+    def update(self, world):
         dX = 0
         dY = 0
-
-        # reset movement direction
         self.direction = 0
-
-        # get keypresses
         key = pg.key.get_pressed()
-        if key[pg.K_LEFT]:
+        if key[self.controls['left']]:
             dX -= 5
             self.direction = -1
-        if key[pg.K_RIGHT]:
+        if key[self.controls['right']]:
             dX += 5
             self.direction = 1
-        if key[pg.K_UP] and not self.jumped:
+        if key[self.controls['up']] and not self.jumped:
             self.vel_y = -15
             self.jumped = True
 
-        # add gravity
         self.vel_y += 1
         if self.vel_y > 10:
             self.vel_y = 10
         dY += self.vel_y
 
-        # Pre-calculate potential new position
         new_x = self.rect.x + dX
         new_y = self.rect.y + dY
 
-        # check for collisions - only check nearby tiles for performance
-        start_x = max(0, (new_x // tile_size) - 1)
-        end_x = min(grid_width, (new_x + self.width) // tile_size + 2)
-        start_y = max(0, (new_y // tile_size) - 1)
-        end_y = min(grid_height, (new_y + self.height) // tile_size + 2)
-
-        # Check collisions only with nearby tiles
         for tile in world.tile_list:
-            tile_rect = tile[1]
-            # Skip tiles that are too far away
-            if (tile_rect.x < (start_x * tile_size) or tile_rect.x > (end_x * tile_size) or
-                tile_rect.y < (start_y * tile_size) or tile_rect.y > (end_y * tile_size)):
-                continue
-
-            # check for collision in x direction
-            if tile_rect.colliderect(pg.Rect(new_x, self.rect.y, self.width, self.height)):
+            if tile[1].colliderect(pg.Rect(new_x, self.rect.y, self.width, self.height)):
                 dX = 0
                 new_x = self.rect.x
-
-            # check for collision in y direction
-            if tile_rect.colliderect(pg.Rect(self.rect.x, new_y, self.width, self.height)):
-                # check if below the ground (jumping)
+            if tile[1].colliderect(pg.Rect(self.rect.x, new_y, self.width, self.height)):
                 if self.vel_y < 0:
-                    dY = tile_rect.bottom - self.rect.top
+                    dY = tile[1].bottom - self.rect.top
                     self.vel_y = 0
-                # check if above the ground (falling)
                 elif self.vel_y >= 0:
-                    dY = tile_rect.top - self.rect.bottom
+                    dY = tile[1].top - self.rect.bottom
                     self.vel_y = 0
                     self.jumped = False
 
-        # update player coordinates
         self.rect.x += dX
         self.rect.y += dY
+        return self.check_collisions(world)
 
-        # draw player onto render surface
-        render_surface.blit(self.image, self.rect)
-
-        return self.check_collisions()
-
-    def check_collisions(self):
-        # enemy collide?
-        if pg.sprite.spritecollide(self, enemy_group, False):
-            return -1
-
-        if pg.sprite.spritecollide(self, oj_group, False):
-            return -1
-
-        # Check for level transition tile (9)
+    def check_collisions(self, world):
+        if pg.sprite.spritecollide(self, enemy_group, False): return -1
+        if pg.sprite.spritecollide(self, oj_group, False): return -1
         for tile in world.level_transition_tiles:
-            if self.rect.colliderect(tile[1]):
-                return 2  # Signal to go to next level
-
+            if self.rect.colliderect(tile[1]): return 2
         return 0
-
 
 class World():
     def __init__(self, data):
         self.tile_list = []
-        self.level_transition_tiles = []  # List to store level transition tiles
-
+        self.level_transition_tiles = []
         try:
             tile_img = pg.image.load("assets/mine/level1tile.png")
             tile_img = pg.transform.scale(tile_img, (tile_size, tile_size))
         except:
             tile_img = pg.Surface((tile_size, tile_size))
-            tile_img.fill((100, 100, 100))  # Gray tiles if image not found
-
-        # Create a special tile for level transitions (tile 9)
+            tile_img.fill((100, 100, 100))
         try:
             self.transition_tile_img = pg.image.load("assets/mine/levelstile.png")
             self.transition_tile_img = pg.transform.scale(self.transition_tile_img, (tile_size, tile_size))
-            # Make it a different color to distinguish it
             color_image = pg.Surface(self.transition_tile_img.get_size()).convert_alpha()
-            color_image.fill((0, 255, 0, 128))  # Green with transparency
+            color_image.fill((0, 255, 0, 128))
             self.transition_tile_img.blit(color_image, (0, 0), special_flags=pg.BLEND_RGBA_MULT)
         except:
             self.transition_tile_img = pg.Surface((tile_size, tile_size))
-            self.transition_tile_img.fill((0, 255, 0))  # Green transition tile if image not found
+            self.transition_tile_img.fill((0, 255, 0))
 
-        rCount = 0
-
-        for i in data:
-            cCount = 0
-            for j in i:
-                if j == 1:
-                    img = tile_img
-                    img_rect = img.get_rect()
-                    img_rect.x = cCount * tile_size
-                    img_rect.y = rCount * tile_size
-                    tile = (img, img_rect)
-                    self.tile_list.append(tile)
-                if j == 2:
-                    enmy = Enemy(cCount * tile_size, rCount * tile_size)
-                    enemy_group.add(enmy)
-                if j == 3:
-                    oj = OJ(cCount * tile_size, rCount * tile_size)
-                    oj_group.add(oj)
-                if j == 9:  # Level transition tile
-                    img = self.transition_tile_img
-                    img_rect = img.get_rect()
-                    img_rect.x = cCount * tile_size
-                    img_rect.y = rCount * tile_size
-                    tile = (img, img_rect)
-                    self.level_transition_tiles.append(tile)
-
-                cCount += 1
-            rCount += 1
+        for r_idx, row in enumerate(data):
+            for c_idx, tile_val in enumerate(row):
+                if tile_val == 1:
+                    img_rect = tile_img.get_rect(topleft=(c_idx * tile_size, r_idx * tile_size))
+                    self.tile_list.append((tile_img, img_rect))
+                elif tile_val == 2:
+                    enemy_group.add(Enemy(c_idx * tile_size, r_idx * tile_size))
+                elif tile_val == 3:
+                    oj_group.add(OJ(c_idx * tile_size, r_idx * tile_size))
+                elif tile_val == 9:
+                    img_rect = self.transition_tile_img.get_rect(topleft=(c_idx * tile_size, r_idx * tile_size))
+                    self.level_transition_tiles.append((self.transition_tile_img, img_rect))
 
     def draw(self):
-        for i in self.tile_list:
-            render_surface.blit(i[0], i[1])
-        # Draw level transition tiles
-        for i in self.level_transition_tiles:
-            render_surface.blit(i[0], i[1])
-
+        for tile in self.tile_list: render_surface.blit(tile[0], tile[1])
+        for tile in self.level_transition_tiles: render_surface.blit(tile[0], tile[1])
 
 class Enemy(pg.sprite.Sprite):
     def __init__(self, x, y):
         pg.sprite.Sprite.__init__(self)
-
         try:
             self.image = pg.image.load("assets/mine/enemy.png")
             self.image = pg.transform.scale(self.image, (tile_size, tile_size))
         except:
             self.image = pg.Surface((tile_size, tile_size))
-            self.image.fill((255, 0, 0))  # Red enemy if image not found
-
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
+            self.image.fill((255, 0, 0))
+        self.rect = self.image.get_rect(topleft=(x, y))
         self.move_direction = 1
         self.move_counter = 0
 
@@ -281,7 +219,6 @@ class Enemy(pg.sprite.Sprite):
             self.move_direction *= -1
             self.move_counter *= -1
 
-
 class OJ(pg.sprite.Sprite):
     def __init__(self, x, y):
         pg.sprite.Sprite.__init__(self)
@@ -290,187 +227,97 @@ class OJ(pg.sprite.Sprite):
             self.image = pg.transform.scale(self.image, (tile_size, tile_size))
         except:
             self.image = pg.Surface((tile_size, tile_size))
-            self.image.fill((255, 165, 0))  # Orange juice if image not found
+            self.image.fill((255, 165, 0))
+        self.rect = self.image.get_rect(topleft=(x, y))
 
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-
-# Level data definitions
-# Level 1
-world_data_1 = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-]
-
-# Level 2 (example)
-world_data_2 = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-]
-
-# Level 3 (example)
-world_data_3 = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-]
-
-# Dictionary to map level numbers to world data
-level_data = {
-    1: world_data_1,
-    2: world_data_2,
-    3: world_data_3
-    # Add more levels as needed: 4: world_data_4, etc.
-}
-
-# clock so we can lock FPS to 30
 clock = pg.time.Clock()
-
-# Initialize game objects
-plr = None
+player_group = pg.sprite.Group()
 enemy_group = pg.sprite.Group()
 oj_group = pg.sprite.Group()
 world = None
-
-# Create buttons
 start_button = Button(render_width//2 - 50, render_height//2, start_img)
 res_button = Button(render_width//2 - 50, render_height//2 + 100, res_img)
 
-# Function to reset/load a level
 def load_level(level_num):
-    global plr, enemy_group, oj_group, world, game_over
-    if level_num in level_data:
-        enemy_group.empty()
-        oj_group.empty()
-        world = World(level_data[level_num])
-        plr = Player1(100, render_height - 130)
-        game_over = 0
-        print(f"Loaded level {level_num}")
-    else:
-        print(f"Level {level_num} not found!")
+    global world, game_over
+    player_group.empty()
+    enemy_group.empty()
+    oj_group.empty()
+    try:
+        level_path = f"assets/levels/level_{level_num}.txt"
+        with open(level_path, 'r') as f:
+            data = [list(map(int, line.strip().split())) for line in f]
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error loading level {level_num}: {e}")
+        return False
+    
+    world = World(data)
+    player1_controls = {'up': pg.K_UP, 'left': pg.K_LEFT, 'right': pg.K_RIGHT}
+    player2_controls = {'up': pg.K_w, 'left': pg.K_a, 'right': pg.K_d}
+    player_group.add(Player(100, render_height - 130, player1_controls))
+    player_group.add(Player(150, render_height - 130, player2_controls))
+    game_over = 0
+    print(f"Loaded level {level_num}")
+    return True
 
-# Main game loop
 run = True
 while run:
-    # Limit FPS to 30
     clock.tick(30)
-
-    # Clear the render surface
-    if level == 0:  # Main menu
+    if level == 0:
         render_surface.blit(menu_bg_img, (0, 0))
+        # **FIXED LOGIC**: Only set level to 1 if loading is successful
         if start_button.draw():
-            level = 1
-            load_level(level)
-    else:  # Game level
+            if load_level(1):
+                level = 1
+    else:
         render_surface.blit(bg_img, (0, 0))
-        world.draw()
+        
+        # This check prevents the crash if world is None
+        if world:
+            world.draw()
 
         if game_over == 0:
-            # Update game objects
-            enemy_group.update()
-            result = plr.update()
-
-            if result == -1:  # Player died
-                game_over = -1
-            elif result == 2:  # Player reached level transition tile
-                level += 1
-                if level in level_data:
-                    load_level(level)
-                else:
-                    print("You've completed all levels!")
-                    level = 0  # Return to main menu after completing all levels
-
-        # Draw game objects
+            if not paused:
+                enemy_group.update()
+                for player in player_group:
+                    result = player.update(world)
+                    if result == -1:
+                        game_over = -1
+                        break
+                    elif result == 2:
+                        next_level_num = level + 1
+                        if next_level_num > max_levels:
+                            print("You've completed all levels!")
+                            level = 0
+                        else:
+                            # **FIXED LOGIC**: Check if next level loaded, otherwise return to menu
+                            if load_level(next_level_num):
+                                level = next_level_num
+                            else:
+                                level = 0
+                        break
+        
+        player_group.draw(render_surface)
         enemy_group.draw(render_surface)
         oj_group.draw(render_surface)
 
-        # Handle game over state
-        if game_over == -1:
-            if res_button.draw():
-                # Reset the current level
-                load_level(level)
+        if game_over == -1 and res_button.draw():
+            load_level(level)
+        
+        if paused:
+            draw_text('PAUSED', font, white, render_width // 2 - 80, render_height // 2)
 
-    # Scale the render surface to the window size and display it
     scaled_surface = pg.transform.scale(render_surface, (window_width, window_height))
     screen.blit(scaled_surface, (0, 0))
 
-    # Event handling
     for ev in pg.event.get():
         if ev.type == pg.QUIT:
             run = False
-        # Add keyboard controls to switch levels for testing
         elif ev.type == pg.KEYDOWN:
-            if ev.key == pg.K_0:  # Press 0 to go to main menu
+            if ev.key == pg.K_SPACE:
+                paused = not paused
+            if ev.key == pg.K_0:
                 level = 0
-            elif ev.key == pg.K_1:  # Press 1 to go to level 1
-                level = 1
-                load_level(level)
-            elif ev.key == pg.K_2:  # Press 2 to go to level 2
-                level = 2
-                load_level(level)
-            elif ev.key == pg.K_3:  # Press 3 to go to level 3
-                level = 3
-                load_level(level)
 
     pg.display.update()
 
