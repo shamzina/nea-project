@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/shmz/projects/nea/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

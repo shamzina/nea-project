@@ -1,0 +1,3 @@
+/home/shmz/projects/nea/build/CMakeFiles/tethered_together.dir
+/home/shmz/projects/nea/build/CMakeFiles/edit_cache.dir
+/home/shmz/projects/nea/build/CMakeFiles/rebuild_cache.dir
